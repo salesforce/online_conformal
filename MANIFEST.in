@@ -1,0 +1,8 @@
+include CODE_OF_CONDUCT.md LICENSE SECURITY.md requirements.txt
+global-exclude *.py[cod]
+exclude *.ipynb
+exclude make_table.py Dockerfile .pre-commit-config.yaml .copyright.tmpl .gitignore
+recursive-exclude cv_logits *
+recursive-exclude cv_models *
+recursive-exclude figures *
+recursive-exclude results *

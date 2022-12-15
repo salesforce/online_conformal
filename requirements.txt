@@ -1,0 +1,8 @@
+datasets
+jinja2>=3.0
+matplotlib
+numpy
+pandas
+salesforce-merlion
+scipy
+tqdm

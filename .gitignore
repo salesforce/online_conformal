@@ -1,0 +1,18 @@
+# package
+__pycache__
+*.egg-info
+dist
+# experiments
+data
+results
+cv_models
+cv_logits
+# IDE/system
+.idea
+*.swp
+.DS_Store
+sandbox
+.vscode
+Icon?
+# build files
+.ipynb_checkpoints
