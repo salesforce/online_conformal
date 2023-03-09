@@ -8,7 +8,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="online_conformal",
-    version="1.0.0",
+    version="1.0.1",
     author="Aadyot Bhatnagar",
     author_email="abhatnagar@salesforce.com",
     description="A library for time series conformal prediction",
