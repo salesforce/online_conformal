@@ -8,13 +8,15 @@ from setuptools import find_packages, setup
 
 setup(
     name="online_conformal",
-    version="1.0.1",
+    version="1.0.2",
     author="Aadyot Bhatnagar",
     author_email="abhatnagar@salesforce.com",
     description="A library for time series conformal prediction",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     license="Apache 2.0",
+    url="https://github.com/salesforce/online_conformal",
     packages=find_packages(include=["online_conformal*"]),
+    package_dir={"online_conformal": "online_conformal"},
     install_requires=open("requirements.txt").read().split("\n"),
 )
