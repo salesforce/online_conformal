@@ -13,8 +13,10 @@ import numpy as np
 import pandas as pd
 
 
-def df_to_str_df(df):
-    return df.applymap(lambda x: f"{x:.3f}".lstrip("0"))
+def df_to_str_df(df, print_sd):
+    if not print_sd:
+        return df.applymap(lambda x: f"{x:.3f}")
+    return df.apply(lambda c: c.apply(lambda x: (f"{x:.3f}" if "Reg" in c.name else f"{x:.2f}").lstrip("0")))
 
 
 def rename_stats(stat):
@@ -40,7 +42,9 @@ def bold_best(v, dataset, full_df, target_cov):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--coverage", default=90, type=int)
+    parser.add_argument("--window", default=20, type=int)
     parser.add_argument("--ensemble", action="store_true", default=False)
+    parser.add_argument("--print_sd", action="store_true", default=False)
     args = parser.parse_args()
 
     full_df, full_str_df = None, None
@@ -49,21 +53,22 @@ def main():
     mae_idx = "Enb" if args.ensemble else "Base"
     dirname = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     for dataset, model in itertools.product(datasets, models):
-        fname = os.path.join(dirname, dataset, model, ("results_enb.csv" if args.ensemble else "results_base.csv"))
+        fname = "results_enb.csv" if args.ensemble else "results_base.csv"
+        fname = os.path.join(dirname, dataset, model, f"k={args.window}", fname)
         if os.path.exists(fname):
             df = pd.read_csv(fname, index_col=0)
             df = df[df["Target Coverage"] == args.coverage / 100].drop(columns="Target Coverage")
-            df = df.rename(columns=rename_stats)
-            df = df.rename(index=lambda m: re.sub("CBCE", "SAOCP", m))
+            df = df.rename(columns=rename_stats, index=lambda m: re.sub("CBCE", "SAOCP", m))
             if df.isna().all().all() or len(df) == 0:
                 continue
-            if "ModelSigma" in df.index:
-                df = df.drop(labels=["ModelSigma"])
+            for m in ["ModelSigma", "SimpleSAOCP"]:
+                if m in df.index:
+                    df = df.drop(labels=[m])
             non_sd_cols = [c for c in df.columns if "SD" not in c]
             sd_cols = [c + " SD" for c in non_sd_cols]
-            str_df = df_to_str_df(df.loc[:, non_sd_cols])
-            if all(c in df.columns for c in sd_cols):
-                str_df = str_df + "\\textsubscript{" + df_to_str_df(df.loc[:, sd_cols]).values + "}"
+            str_df = df_to_str_df(df.loc[:, non_sd_cols], args.print_sd)
+            if args.print_sd and all(c in df.columns for c in sd_cols):
+                str_df = str_df + "\\textsubscript{" + df_to_str_df(df.loc[:, sd_cols], True).values + "}"
             mae = pd.read_csv(os.path.join(dirname, dataset, model, "mae.csv"), index_col=0).loc[mae_idx, "MAE"]
             model = f"{model} (MAE = {mae:.2f})"
             df.columns = pd.MultiIndex.from_tuples([(re.sub("_", " ", dataset), model, c) for c in df.columns])

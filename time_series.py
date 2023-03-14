@@ -62,6 +62,7 @@ def parse_args():
     parser.add_argument("--dirname", type=str, default=results_dir, help="Directory where results are stored.")
     parser.add_argument("--dataset", type=str, default="M4_Hourly", choices=list(name2dataset.keys()))
     parser.add_argument("--model", type=str, default="LGBM", choices=list(name2model.keys()))
+    parser.add_argument("--window", type=int, default=20, help="Interval length for strongly adaptive evaluation.")
     parser.add_argument("--target_cov", type=int, nargs="*", help="The target coverages (as a percent).")
     parser.add_argument("--njobs", type=int, default=None, help="The number of parallel processes to use")
     parser.add_argument("--skip_train", action="store_true", help="Skip running models & only use saved results.")
@@ -199,7 +200,7 @@ def evaluate(model, train_data, test_data, horizon, target_covs, calib_frac, ens
     return results
 
 
-def summarize_results(all_results):
+def summarize_results(all_results, window):
     def construct(true, pred):
         return pd.concat([pred[t % len(pred) + 1].iloc[t : t + 1] for t in range(len(true))])
 
@@ -212,7 +213,7 @@ def summarize_results(all_results):
             yhat, lb, ub = result["forecast"]
             horizons = ["full"] + sorted(yhat.keys())
             yhat["full"], lb["full"], ub["full"] = construct(y, yhat), construct(y, lb), construct(y, ub)
-            kwargs = dict(cov=result["target_cov"], window=min(20, len(y)))
+            kwargs = dict(cov=result["target_cov"], window=min(window, len(y)))
             int_miscov = partial(interval_miscoverage, **kwargs)
             int_regret = partial(interval_regret, **kwargs)
             for i, fn in enumerate([coverage, width, int_miscov, int_regret, mae]):
@@ -223,14 +224,14 @@ def summarize_results(all_results):
     return summaries
 
 
-def summarize_file(fname):
+def summarize_file(fname, window=20):
     with open(fname, "rb") as f:
         results = pickle.load(f)
     ts_target_cov = list(results.values())[0]["target_cov"]
-    return ts_target_cov, summarize_results({ts_target_cov: results})[ts_target_cov]
+    return ts_target_cov, summarize_results({ts_target_cov: results}, window=window)[ts_target_cov]
 
 
-def synthesize_results_dir(dirname: str, njobs=1):
+def synthesize_results_dir(dirname: str, window=20, njobs=1):
     target_cov = None
     full_summary = []
     files = sorted(glob.glob(os.path.join(dirname, "*.pkl")), key=lambda k: int(re.search(r"(\d+)\.pkl", k).group(1)))
@@ -238,7 +239,7 @@ def synthesize_results_dir(dirname: str, njobs=1):
         raise RuntimeError(f"Directory {dirname} has no .pkl files of results in it.")
     with mp.Pool(njobs) as pool:
         with tqdm.tqdm(total=len(files), desc="Analyzing Results", leave=False) as pbar:
-            for ts_target_cov, summ in pool.imap_unordered(summarize_file, files):
+            for ts_target_cov, summ in pool.imap_unordered(partial(summarize_file, window=window), files):
                 if target_cov is None:
                     target_cov = ts_target_cov
                 assert ts_target_cov == target_cov
@@ -316,7 +317,8 @@ def main():
     dirnames = {cov: os.path.join(args.dirname, str(int(cov * 100))) for cov in args.target_cov}
     for dirname in dirnames.values():
         os.makedirs(dirname, exist_ok=True)
-    os.makedirs(os.path.join(args.dirname, "figures"), exist_ok=True)
+    os.makedirs(os.path.join(args.dirname, f"k={args.window}"), exist_ok=True)
+    os.makedirs(os.path.join(args.dirname, f"k={args.window}", "figures"), exist_ok=True)
 
     if not args.skip_train:
         n = len(dataset)
@@ -342,7 +344,8 @@ def main():
     mae_table = pd.DataFrame(columns=err_cols)
     for target_cov, dirname in dirnames.items():
         # Create a table & save it
-        summ, sd = synthesize_results_dir(dirname, njobs=args.njobs * 2 if "LGBM" in args.model["name"] else args.njobs)
+        njobs = args.njobs * 2 if "LGBM" in args.model["name"] else args.njobs
+        summ, sd = synthesize_results_dir(dirname, njobs=njobs, window=args.window)
         for col_name, data, data_std in zip(cols + err_cols, *summ.values(), *sd.values()):
             if col_name in err_cols:
                 enb = [m for m in data.columns if "Enb" in m]
@@ -358,15 +361,16 @@ def main():
                 t = enb_table if "Enb" in method else table
                 t.loc[(method, target_cov), col_name] = data.loc["full", method]
                 t.loc[(method, target_cov), col_name + " SD"] = data_std.loc["full", method]
-        table.to_csv(os.path.join(args.dirname, "results_base.csv"))
-        enb_table.to_csv(os.path.join(args.dirname, "results_enb.csv"))
-        mae_table.to_csv(os.path.join(args.dirname, "mae.csv"))
+        table.to_csv(os.path.join(args.dirname, f"k={args.window}", "results_base.csv"))
+        enb_table.to_csv(os.path.join(args.dirname, f"k={args.window}", "results_enb.csv"))
+        mae_table.to_csv(os.path.join(args.dirname, f"k={args.window}", "mae.csv"))
 
         # Make & save figures
+        figdir = os.path.join(args.dirname, f"k={args.window}", "figures")
         fig = visualize(summ, ensemble=False, skip_model_sigma=args.skip_model_sigma)[target_cov]
         fig_enb = visualize(summ, ensemble=True, skip_model_sigma=args.skip_model_sigma)[target_cov]
-        fig.savefig(os.path.join(args.dirname, "figures", f"{int(target_cov * 100)}_results_base.png"))
-        fig_enb.savefig(os.path.join(args.dirname, "figures", f"{int(target_cov * 100)}_results_enb.png"))
+        fig.savefig(os.path.join(figdir, f"{int(target_cov * 100)}_results_base.png"))
+        fig_enb.savefig(os.path.join(figdir, f"{int(target_cov * 100)}_results_enb.png"))
 
 
 if __name__ == "__main__":
