@@ -251,7 +251,8 @@ def synthesize_results_dir(dirname: str, njobs=1):
                         full_summary[i].append(df)
                 pbar.update(1)
 
-    return {target_cov: tuple(pd.concat(summ).groupby("Horizon", dropna=False).mean() for summ in full_summary)}
+    gbs = tuple(pd.concat(summ).groupby("Horizon", dropna=False) for summ in full_summary)
+    return {target_cov: tuple(gb.mean() for gb in gbs)}, {target_cov: tuple(gb.std() for gb in gbs)}
 
 
 def visualize(summaries, ensemble=False, skip_model_sigma=True, plot_regret=True):
@@ -341,19 +342,22 @@ def main():
     mae_table = pd.DataFrame(columns=err_cols)
     for target_cov, dirname in dirnames.items():
         # Create a table & save it
-        summ = synthesize_results_dir(dirname, njobs=args.njobs * 2 if "LGBM" in args.model["name"] else args.njobs)
-        for col_name, data in zip(cols + err_cols, *summ.values()):
+        summ, sd = synthesize_results_dir(dirname, njobs=args.njobs * 2 if "LGBM" in args.model["name"] else args.njobs)
+        for col_name, data, data_std in zip(cols + err_cols, *summ.values(), *sd.values()):
             if col_name in err_cols:
                 enb = [m for m in data.columns if "Enb" in m]
                 base = [m for m in data.columns if "Enb" not in m]
                 if len(base) > 0:
                     mae_table.loc["Base", col_name] = data.loc["full", base[0]]
+                    mae_table.loc["Base SD", col_name] = data_std.loc["full", base[0]]
                 if len(enb) > 0:
                     mae_table.loc["Enb", col_name] = data.loc["full", enb[0]]
+                    mae_table.loc["Enb SD", col_name] = data_std.loc["full", enb[0]]
                 continue
             for method in data.columns:
                 t = enb_table if "Enb" in method else table
                 t.loc[(method, target_cov), col_name] = data.loc["full", method]
+                t.loc[(method, target_cov), col_name + " SD"] = data_std.loc["full", method]
         table.to_csv(os.path.join(args.dirname, "results_base.csv"))
         enb_table.to_csv(os.path.join(args.dirname, "results_enb.csv"))
         mae_table.to_csv(os.path.join(args.dirname, "mae.csv"))
