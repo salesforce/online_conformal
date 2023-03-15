@@ -19,6 +19,7 @@ def parse_args():
     parser.add_argument("--window", default=20, type=int)
     parser.add_argument("--ensemble", action="store_true", default=False)
     parser.add_argument("--print_sd", action="store_true", default=False)
+    parser.add_argument("--markdown", action="store_true", default=False)
     parser.add_argument("--interval_table", action="store_true", default=False)
     parser.add_argument("--dataset", type=str, default="M4_Hourly", help="Only used for interval analysis")
     parser.add_argument("--model", type=str, default="LGBM", help="Only used for interval analysis")
@@ -66,6 +67,10 @@ def bold_best(v, dataset, full_df, target_cov):
         best = [False] * len(v) if len(v_sort) < 1 else (np.round(v, 3) == v_sort[0]) & valid
         second_best = [False] * len(v) if len(v_sort) < 2 else (np.round(v, 3) == v_sort[1]) & valid
     return ["font-weight: bold" if b else "font-style: italic" if b2 else "" for b, b2 in zip(best, second_best)]
+
+
+def md_rename(method):
+    return re.sub("ScaleFree", "SF-", re.sub("Split", "S", re.sub("Conformal", "CP", re.sub("ACI_", "ACI-", method))))
 
 
 def tex_formatting(tex_str):
@@ -118,6 +123,9 @@ def primary_table(args):
     datasets = datasets[sorted(np.unique(datasets, return_index=True)[1])]
     for dataset in datasets:
         df = full_str_df.loc[:, dataset]
+        if args.markdown:
+            print(df.rename(index=md_rename).to_markdown())
+            return
         highlight = functools.partial(bold_best, dataset=dataset, full_df=full_df, target_cov=args.coverage / 100)
         styler = df.style.format(na_rep="--").apply(highlight).hide(axis=1, level=2)
         _models = [m for m in models if m in df.columns.get_level_values(0)]
@@ -156,6 +164,10 @@ def interval_table(args):
 
     if not args.print_sd:
         print(full_str_df)
+    if args.markdown:
+        full_str_df.columns = full_str_df.columns.droplevel(1)
+        print(full_str_df.rename(index=md_rename).to_markdown())
+        return
     highlight = functools.partial(bold_best, dataset=args.dataset, full_df=full_df, target_cov=args.coverage / 100)
     styler = full_str_df.style.format(na_rep="--").apply(highlight).hide(axis=1, level=2)
     tex_str = styler.to_latex(hrules=True, convert_css=True)
