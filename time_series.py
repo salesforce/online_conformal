@@ -253,7 +253,9 @@ def synthesize_results_dir(dirname: str, window=20, njobs=1):
                 pbar.update(1)
 
     gbs = tuple(pd.concat(summ).groupby("Horizon", dropna=False) for summ in full_summary)
-    return {target_cov: tuple(gb.mean() for gb in gbs)}, {target_cov: tuple(gb.std() for gb in gbs)}
+    mu = {target_cov: tuple(gb.mean() for gb in gbs)}
+    sd = {target_cov: tuple(gb.apply(lambda s: pd.Series(s.std() / np.sqrt(len(s)))) for gb in gbs)}
+    return mu, sd
 
 
 def visualize(summaries, ensemble=False, skip_model_sigma=True, plot_regret=True):

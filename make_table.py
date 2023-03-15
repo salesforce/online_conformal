@@ -28,8 +28,12 @@ def parse_args():
 
 def df_to_str_df(df, interval, print_sd):
     if interval or not print_sd:
-        return df.applymap(lambda x: f"{x:.3f}")
-    return df.apply(lambda c: c.apply(lambda x: (f"{x:.3f}" if "Reg" in c.name else f"{x:.2f}").lstrip("0")))
+        return df.applymap(lambda x: f"{(np.round(x, 3)):.3f}")
+    return df.apply(
+        lambda c: c.apply(
+            lambda x: (f"{(np.round(x, 3)):.3f}" if "Reg" in c.name else f"{(np.round(x, 2)):.2f}").lstrip("0")
+        )
+    )
 
 
 def combine_sd_df(df, interval, print_sd):
@@ -70,7 +74,7 @@ def tex_formatting(tex_str):
     tex_str = re.sub("OGD", r"\\methodBasic{}", re.sub("ScaleFree", "", tex_str))
     tex_str = re.sub("Split", "S", re.sub("Conformal", "CP", re.sub("ACI_", "ACI-", tex_str)))
     # Update formatting. Underline second-best instead of italicize, and make index more compact
-    tex_str = re.sub(r"\\itshape\s*([\d.]*|.*?})", r"\\underline{\1}", tex_str)
+    tex_str = re.sub(r"\\itshape\s*([\d.]*)(\\textsubscript\{[\d.]*\})?", r"\\underline{\1\2}", tex_str)
     tex_str = re.sub(f"(?m)^(.*?Coverage)", r"Method\1", re.sub("Method.*?\n", "", tex_str))
     # Put methods in the right order
     lines = tex_str.split("\n")
@@ -132,7 +136,7 @@ def primary_table(args):
 def interval_table(args):
     dirname = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", args.dataset, args.model)
     fname = "results_enb.csv" if args.ensemble else "results_base.csv"
-    ks = [int(k[2:]) for k in os.listdir(dirname) if k.startswith("k=")]
+    ks = sorted([int(k[2:]) for k in os.listdir(dirname) if k.startswith("k=")])
     full_df, full_str_df = None, None
     for k in ks:
         df = pd.read_csv(os.path.join(dirname, f"k={k}", fname), index_col=0)
@@ -150,6 +154,8 @@ def interval_table(args):
         full_df = df if full_df is None else pd.concat((full_df, df), axis=1)
         full_str_df = str_df if full_str_df is None else pd.concat((full_str_df, str_df), axis=1)
 
+    if not args.print_sd:
+        print(full_str_df)
     highlight = functools.partial(bold_best, dataset=args.dataset, full_df=full_df, target_cov=args.coverage / 100)
     styler = full_str_df.style.format(na_rep="--").apply(highlight).hide(axis=1, level=2)
     tex_str = styler.to_latex(hrules=True, convert_css=True)
