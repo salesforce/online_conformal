@@ -32,7 +32,7 @@ def df_to_str_df(df, interval, print_sd):
         return df.applymap(lambda x: f"{(np.round(x, 3)):.3f}")
     return df.apply(
         lambda c: c.apply(
-            lambda x: (f"{(np.round(x, 3)):.3f}" if "Reg" in c.name else f"{(np.round(x, 2)):.2f}").lstrip("0")
+            lambda x: (f"{(np.round(x, 3)):.3f}" if "Reg" in c.name else f"{(np.round(x, 3)):.3f}").lstrip("0")
         )
     )
 
